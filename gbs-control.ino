@@ -3438,7 +3438,8 @@ void doPostPresetLoadSteps()
         }
 
         if (rto->videoStandardInput == 1 || rto->videoStandardInput == 2) {
-            //GBS::PLLAD_ICP::write(5);         // 5 rather than 6 to work well with CVBS sync as well as CSync
+            GBS::PLLAD_ICP::write(3);            // TV5725 spec: ~296µA needed for 15.6kHz Hsync (SD interlaced/Csync)
+            latchPLLAD();
 
             GBS::ADC_FLTR::write(3);             // 5_03 4/5 ADC filter 3=40, 2=70, 1=110, 0=150 Mhz
             GBS::PLLAD_KS::write(2);             // 5_16
@@ -4741,7 +4742,7 @@ void updateSpDynamic(boolean withCurrentVideoModeCheck)
     if (rto->videoStandardInput != 0) {
         if (rto->videoStandardInput <= 2) { // SD interlaced
             GBS::SP_PRE_COAST::write(7);
-            GBS::SP_POST_COAST::write(3);
+            GBS::SP_POST_COAST::write(9); // pre-c364c0f value; 3 was too short for Csync re-lock after Vsync
             GBS::SP_DLT_REG::write(0xC0);     // old: 0x140 works better than 0x130 with psx
             GBS::SP_H_TIMER_VAL::write(0x28); // 5_33
 
