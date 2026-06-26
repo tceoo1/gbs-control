@@ -236,42 +236,45 @@ bool currentSettingHandler(OLEDMenuManager *manager, OLEDMenuItem *, OLEDMenuNav
         display.setTextAlignment(OLEDDISPLAY_TEXT_ALIGNMENT::TEXT_ALIGN_CENTER);
         display.drawXbm(CENTER_IMAGE(TEXT_NO_INPUT));
     } else {
-        // TODO translations
         boolean vsyncActive = 0;
         boolean hsyncActive = 0;
         float ofr = getOutputFrameRate();
         uint8_t currentInput = GBS::ADC_INPUT_SEL::read();
         rto->presetID = GBS::GBS_PRESET_ID::read();
 
-        display.setFont(URW_Gothic_L_Book_20);
         display.setTextAlignment(TEXT_ALIGN_LEFT);
 
+        // resolution name — static bitmap
         if (rto->presetID == 0x01 || rto->presetID == 0x11) {
-            display.drawString(0, 0, "1280x960");
+            display.drawXbm(0, 0, IMAGE_ITEM(TEXT_STATUS_1280x960));
         } else if (rto->presetID == 0x02 || rto->presetID == 0x12) {
-            display.drawString(0, 0, "1280x1024");
+            display.drawXbm(0, 0, IMAGE_ITEM(TEXT_STATUS_1280x1024));
         } else if (rto->presetID == 0x03 || rto->presetID == 0x13) {
-            display.drawString(0, 0, "1280x720");
+            display.drawXbm(0, 0, IMAGE_ITEM(TEXT_STATUS_1280x720));
         } else if (rto->presetID == 0x05 || rto->presetID == 0x15) {
-            display.drawString(0, 0, "1920x1080");
+            display.drawXbm(0, 0, IMAGE_ITEM(TEXT_STATUS_1920x1080));
         } else if (rto->presetID == 0x06 || rto->presetID == 0x16) {
-            display.drawString(0, 0, "Downscale");
+            display.drawXbm(0, 0, IMAGE_ITEM(TEXT_STATUS_DOWNSCALE));
         } else if (rto->presetID == 0x04) {
-            display.drawString(0, 0, "720x480");
+            display.drawXbm(0, 0, IMAGE_ITEM(TEXT_STATUS_720x480));
         } else if (rto->presetID == 0x14) {
-            display.drawString(0, 0, "768x576");
+            display.drawXbm(0, 0, IMAGE_ITEM(TEXT_STATUS_768x576));
         } else {
-            display.drawString(0, 0, "bypass");
+            display.drawXbm(0, 0, IMAGE_ITEM(TEXT_STATUS_BYPASS));
         }
 
+        // frame rate — dynamic value, rendered as text
+        display.setFont(URW_Gothic_L_Book_20);
         display.drawString(0, 20, String(ofr, 5) + "Hz");
 
+        // input type — static bitmap
         if (currentInput == 1) {
-            display.drawString(0, 41, "RGB");
+            display.drawXbm(0, 41, IMAGE_ITEM(TEXT_STATUS_RGB));
         } else {
-            display.drawString(0, 41, "YpBpR");
+            display.drawXbm(0, 41, IMAGE_ITEM(TEXT_STATUS_YPBPR));
         }
 
+        // H/V sync indicators
         if (currentInput == 1) {
             vsyncActive = GBS::STATUS_SYNC_PROC_VSACT::read();
             if (vsyncActive) {

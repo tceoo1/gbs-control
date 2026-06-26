@@ -130,8 +130,18 @@ menu_items = [
         "tag": "OM_OSD",
         "en-US": "Open OSD Menu",
     },
-
-
+    # Status screen - resolution names
+    {"tag": "TEXT_STATUS_1280x960",  "en-US": "1280x960",  "size": 16},
+    {"tag": "TEXT_STATUS_1280x1024", "en-US": "1280x1024", "size": 16},
+    {"tag": "TEXT_STATUS_1280x720",  "en-US": "1280x720",  "size": 16},
+    {"tag": "TEXT_STATUS_1920x1080", "en-US": "1920x1080", "size": 16},
+    {"tag": "TEXT_STATUS_720x480",   "en-US": "720x480",   "size": 16},
+    {"tag": "TEXT_STATUS_768x576",   "en-US": "768x576",   "size": 16},
+    {"tag": "TEXT_STATUS_DOWNSCALE", "en-US": "Downscale", "size": 16},
+    {"tag": "TEXT_STATUS_BYPASS",    "en-US": "Bypass",    "size": 16},
+    # Status screen - input type labels
+    {"tag": "TEXT_STATUS_RGB",   "en-US": "RGB",   "size": 16},
+    {"tag": "TEXT_STATUS_YPBPR", "en-US": "YpBpR", "size": 16},
 ]
 
 res = """
