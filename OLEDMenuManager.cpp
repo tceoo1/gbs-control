@@ -325,9 +325,8 @@ void OLEDMenuManager::drawStatusBar(bool negative)
         curIndex = cursor + 1;
         // itemUnderCursor must have a parent
         totalItems = itemUnderCursor->parent->numSubItem;
-        // TODO Adjust to OLED_MENU_STATUS_BAR_HEIGHT
         this->display->setFont(DejaVu_Sans_Mono_10);
-        this->display->drawStringf(OLED_MENU_WIDTH, 1, statusBarBuffer, "%d/%d", curIndex, totalItems);
+        this->display->drawStringf(OLED_MENU_WIDTH, (OLED_MENU_STATUS_BAR_HEIGHT - 10) / 2, statusBarBuffer, "%d/%d", curIndex, totalItems);
     } else {
         this->display->drawString(OLED_MENU_WIDTH, 0, "     ");
     }
