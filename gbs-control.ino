@@ -4771,12 +4771,12 @@ void updateSpDynamic(boolean withCurrentVideoModeCheck)
                     ratioHs = 0.032; // 0.032: (~100 / 2560) is ~2.5uS on NTSC (find with crtemudriver)
                 }
 
-                //Serial.print(" (debug) hPeriod: ");  Serial.println(hPeriod);
-                //Serial.print(" (debug) ratioHs: ");  Serial.println(ratioHs, 5);
-                //Serial.print(" (debug) ignoreBase: 0x");  Serial.println(ignoreLength,HEX);
+                SerialM.print(F(" (debug) hPeriod: "));  SerialM.println(hPeriod);
+                SerialM.print(F(" (debug) ratioHs: "));  SerialM.println(ratioHs, 5);
+                SerialM.print(F(" (debug) ignoreBase: 0x"));  SerialM.println(ignoreLength, HEX);
                 uint16_t pllDiv = GBS::PLLAD_MD::read();
                 ignoreLength = ignoreLength + (pllDiv * (ratioHs * 0.38)); // for factor: crtemudriver tests
-                //SerialM.print(" (debug) ign.length: 0x"); SerialM.println(ignoreLength, HEX);
+                SerialM.print(F(" (debug) ign.length: 0x")); SerialM.println(ignoreLength, HEX);
 
                 // > check relies on sync instability (potentially from too large ign. length) getting cought earlier
                 if (ignoreLength > GBS::SP_H_PULSE_IGNOR::read() || GBS::SP_H_PULSE_IGNOR::read() >= 0x90) {
