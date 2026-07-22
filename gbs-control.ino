@@ -1,3 +1,5 @@
+#include "config.h"
+
 #include "ntsc_240p.h"
 #include "pal_240p.h"
 #include "ntsc_720x480.h"
@@ -60,6 +62,7 @@ volatile int oled_main_pointer = 0; // volatile vars change done with ISR
 volatile int oled_pointer_count = 0;
 volatile int oled_sub_pointer = 0;
 #endif
+#if ENABLE_WIFI
 #include <ESP8266WiFi.h>
 // ESPAsyncTCP and ESPAsyncWebServer libraries by me-no-dev
 // download (green "Clone or download" button) and extract to Arduino libraries folder
@@ -68,7 +71,9 @@ volatile int oled_sub_pointer = 0;
 // https://github.com/me-no-dev/ESPAsyncWebServer
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
+#endif
 #include "FS.h"
+#if ENABLE_WIFI
 #include <DNSServer.h>
 #include <WiFiUdp.h>
 #include <ESP8266mDNS.h> // mDNS library for finding gbscontrol.local on the local network
@@ -86,6 +91,7 @@ volatile int oled_sub_pointer = 0;
 // See 3rdparty/WebSockets for unmodified source and license
 #include "src/WebSockets.h"
 #include "src/WebSocketsServer.h"
+#endif
 
 // Optional:
 // ESP8266-ping library to aid debugging WiFi issues, install via Arduino library manager
@@ -95,6 +101,13 @@ volatile int oled_sub_pointer = 0;
 #include <PingerResponse.h>
 unsigned long pingLastTime;
 Pinger pinger; // pinger global object to aid debugging WiFi issues
+#endif
+
+#if !ENABLE_WIFI && !USE_NEW_OLED_MENU
+#error "ENABLE_WIFI=0 requires USE_NEW_OLED_MENU=1 (the legacy OLED menu uses the web socket)."
+#endif
+#if !ENABLE_WIFI && defined(HAVE_PINGER_LIBRARY)
+#error "ENABLE_WIFI=0 is incompatible with HAVE_PINGER_LIBRARY (ping needs WiFi)."
 #endif
 
 typedef TV5725<GBS_ADDR> GBS;
@@ -134,11 +147,13 @@ static const char st_info_string[] PROGMEM =
     "(WiFi): Access 'http://gbsslave:80' or 'http://gbsslave.local' (or device IP) in your browser";
 #endif
 
+#if ENABLE_WIFI
 AsyncWebServer server(80);
 DNSServer dnsServer;
 WebSocketsServer webSocket(81);
 //AsyncWebSocket webSocket("/ws");
 PersWiFiManager persWM(server, dnsServer);
+#endif
 
 #define DEBUG_IN_PIN D6 // marked "D12/MISO/D6" (Wemos D1) or D6 (Lolin NodeMCU)
 // SCL = D1 (Lolin), D15 (Wemos D1) // ESP8266 Arduino default map: SCL
@@ -207,7 +222,7 @@ char userCommand;               // Serial / Web Server commands
 static uint8_t lastSegment = 0xFF; // GBS segment for direct access
 //uint8_t globalDelay; // used for dev / debug
 
-#if defined(ESP8266)
+#if defined(ESP8266) && ENABLE_WIFI
 // serial mirror class for websocket logs
 class SerialMirror : public Stream
 {
@@ -5794,9 +5809,11 @@ void printInfo()
     uint8_t lockCounter = 0;
 
     int32_t wifi = 0;
+#if ENABLE_WIFI
     if ((WiFi.status() == WL_CONNECTED) || (WiFi.getMode() == WIFI_AP)) {
         wifi = WiFi.RSSI();
     }
+#endif
 
     uint16_t hperiod = GBS::HPERIOD_IF::read();
     uint16_t vperiod = GBS::VPERIOD_IF::read();
@@ -7167,6 +7184,19 @@ void loadDefaultUserOptions()
     uopt->disableExternalClockGenerator = 0; // #19
 }
 
+#if !ENABLE_WIFI
+// preinit() runs before setup() and before the SDK starts WiFi, so keep the radio
+// off here. Using the raw SDK keeps ESP8266WiFi.h excluded (stray WiFi.* then fails
+// to compile). Only static/C calls are allowed in preinit().
+extern "C" {
+#include "user_interface.h"
+}
+void preinit()
+{
+    wifi_set_opmode_current(NULL_MODE); // radio off for this boot; not persisted
+}
+#endif
+
 //RF_PRE_INIT() {
 //  system_phy_set_powerup_option(3);  // full RFCAL at boot
 //}
@@ -7264,7 +7294,11 @@ void setup()
     attachInterrupt(digitalPinToInterrupt(pin_clk), isrRotaryEncoder, FALLING);
 #endif
 
+#if ENABLE_WIFI
     rto->webServerEnabled = true;
+#else
+    rto->webServerEnabled = false;
+#endif
     rto->webServerStarted = false; // make sure this is set
 
     Serial.begin(115200); // Arduino IDE Serial Monitor requires the same 115200 bauds!
@@ -7272,7 +7306,9 @@ void setup()
 
     // millis() at this point: typically 65ms
     // start web services as early in boot as possible
+#if ENABLE_WIFI
     WiFi.hostname(device_hostname_partial); // was _full
+#endif
 
     startWire();
     // run some dummy commands to init I2C to GBS and cached segments
@@ -7281,6 +7317,7 @@ void setup()
     writeOneByte(0x00, 0);
     GBS::STATUS_00::read();
 
+#if ENABLE_WIFI
     if (rto->webServerEnabled) {
         rto->allowUpdatesOTA = false;       // need to initialize for handleWiFi()
         WiFi.setSleepMode(WIFI_NONE_SLEEP); // low latency responses, less chance for missing packets
@@ -7292,6 +7329,7 @@ void setup()
         WiFi.mode(WIFI_OFF);
         WiFi.forceSleepBegin();
     }
+#endif
 #ifdef HAVE_PINGER_LIBRARY
     pingLastTime = millis();
 #endif
@@ -7482,6 +7520,7 @@ void setup()
         delay(1);
     }
 
+#if ENABLE_WIFI
     if (WiFi.status() == WL_CONNECTED) {
         // nothing
     } else if (WiFi.SSID().length() == 0) {
@@ -7490,6 +7529,7 @@ void setup()
         SerialM.println(F("(WiFi): still connecting.."));
         WiFi.reconnect(); // only valid for station class (ok here)
     }
+#endif
 
     // dummy commands
     GBS::STATUS_00::read();
@@ -7667,6 +7707,7 @@ void discardSerialRxData()
     }
 }
 
+#if ENABLE_WIFI
 void updateWebSocketData()
 {
     if (rto->webServerEnabled && rto->webServerStarted) {
@@ -7801,6 +7842,10 @@ void handleWiFi(boolean instant)
     }
     yield();
 }
+#else
+void updateWebSocketData() {}
+void handleWiFi(boolean) {}
+#endif
 
 void myLog(char const* type, char command) {
     SerialM.printf("%s command %c at settings source %d, custom slot %d, status %x\n",
@@ -8196,9 +8241,11 @@ void loop()
                 rto->printInfos = !rto->printInfos;
                 break;
             case 'c':
+#if ENABLE_WIFI
                 SerialM.println(F("OTA Updates on"));
                 initUpdateOTA();
                 rto->allowUpdatesOTA = true;
+#endif
                 break;
             case 'G':
                 SerialM.print(F("Debug Pings "));
@@ -8980,8 +9027,10 @@ void loop()
 }
 
 #if defined(ESP8266)
+#if ENABLE_WIFI
 #include "webui_html.h"
 // gzip -c9 webui.html > webui_html && xxd -i webui_html > webui_html.h && rm webui_html && sed -i -e 's/unsigned char webui_html\[]/const uint8_t webui_html[] PROGMEM/' webui_html.h && sed -i -e 's/unsigned int webui_html_len/const unsigned int webui_html_len/' webui_html.h
+#endif
 
 void handleType2Command(char argument)
 {
@@ -9000,7 +9049,9 @@ void handleType2Command(char argument)
             break;
         case '1':
             // reset to defaults button
+#if ENABLE_WIFI
             webSocket.close();
+#endif
             loadDefaultUserOptions();
             saveUserPrefs();
             Serial.println(F("options set to defaults, restarting"));
@@ -9062,7 +9113,9 @@ void handleType2Command(char argument)
             //
             break;
         case 'a':
+#if ENABLE_WIFI
             webSocket.close();
+#endif
             Serial.println(F("restart"));
             delay(60);
             ESP.reset(); // don't use restart(), messes up websocket reconnects
@@ -9331,12 +9384,14 @@ void handleType2Command(char argument)
             saveUserPrefs();
             break;
         case 'u':
+#if ENABLE_WIFI
             // restart to attempt wifi station mode connect
             delay(30);
             WiFi.mode(WIFI_STA);
             WiFi.hostname(device_hostname_partial); // _full
             delay(30);
             ESP.reset();
+#endif
             break;
         case 'v': {
             uopt->wantFullHeight = !uopt->wantFullHeight;
@@ -9559,6 +9614,7 @@ void handleType2Command(char argument)
 //  }
 //}
 
+#if ENABLE_WIFI
 WiFiEventHandler disconnectedEventHandler;
 
 void startWebserver()
@@ -10026,6 +10082,7 @@ void initUpdateOTA()
     ArduinoOTA.begin();
     yield();
 }
+#endif
 
 // sets every element of str to 0 (clears array)
 void StrClear(char *str, uint16_t length)

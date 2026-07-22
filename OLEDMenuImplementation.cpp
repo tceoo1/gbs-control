@@ -1,12 +1,19 @@
+#include "config.h"
+
 #define OSD_TIMEOUT 8000
 
+#if ENABLE_WIFI
 #include <ESP8266WiFi.h>
+#endif
+#include "FS.h"
 #include "OLEDMenuImplementation.h"
 #include "options.h"
 #include "tv5725.h"
 #include "slot.h"
+#if ENABLE_WIFI
 #include "src/WebSockets.h"
 #include "src/WebSocketsServer.h"
+#endif
 #include "fonts.h"
 #include "OSDManager.h"
 
@@ -19,10 +26,12 @@ extern void loadDefaultUserOptions();
 extern uint8_t getVideoMode();
 extern runTimeOptions *rto;
 extern userOptions *uopt;
+#if ENABLE_WIFI
 extern const char *ap_ssid;
 extern const char *ap_password;
 extern const char *device_hostname_full;
 extern WebSocketsServer webSocket;
+#endif
 extern OLEDMenuManager oledMenu;
 extern OSDManager osdManager;
 unsigned long oledMenuFreezeStartTime;
@@ -188,17 +197,23 @@ bool resetMenuHandler(OLEDMenuManager *manager, OLEDMenuItem *item, OLEDMenuNav,
         case MT_RESTORE_FACTORY:
             display->drawXbm(CENTER_IMAGE(TEXT_RESTORING));
             break;
+#if ENABLE_WIFI
         case MT_RESET_WIFI:
             display->drawXbm(CENTER_IMAGE(TEXT_RESETTING_WIFI));
             break;
+#endif
     }
     display->display();
+#if ENABLE_WIFI
     webSocket.close();
+#endif
     delay(50);
     switch (item->tag) {
+#if ENABLE_WIFI
         case MT_RESET_WIFI:
             WiFi.disconnect();
             break;
+#endif
         case MT_RESTORE_FACTORY:
             loadDefaultUserOptions();
             saveUserPrefs();
@@ -291,6 +306,7 @@ bool currentSettingHandler(OLEDMenuManager *manager, OLEDMenuItem *, OLEDMenuNav
 
     return false;
 }
+#if ENABLE_WIFI
 bool wifiMenuHandler(OLEDMenuManager *manager, OLEDMenuItem *item, OLEDMenuNav, bool)
 {
     static char ssid[64];
@@ -326,6 +342,7 @@ bool wifiMenuHandler(OLEDMenuManager *manager, OLEDMenuItem *item, OLEDMenuNav, 
     }
     return true;
 }
+#endif
 bool osdMenuHanlder(OLEDMenuManager *manager, OLEDMenuItem *, OLEDMenuNav nav, bool isFirstTime)
 {
     static unsigned long start;
@@ -407,7 +424,9 @@ void initOLEDMenu()
     oledMenu.registerItem(root, MT_NULL, IMAGE_ITEM(OM_PRESET), presetsCreationMenuHandler);
 
     // WiFi
+#if ENABLE_WIFI
     oledMenu.registerItem(root, MT_NULL, IMAGE_ITEM(OM_WIFI), wifiMenuHandler);
+#endif
 
     // Current Settings
     oledMenu.registerItem(root, MT_NULL, IMAGE_ITEM(OM_CURRENT), currentSettingHandler);
@@ -416,5 +435,7 @@ void initOLEDMenu()
     OLEDMenuItem *resetMenu = oledMenu.registerItem(root, MT_NULL, IMAGE_ITEM(OM_RESET_RESTORE));
     oledMenu.registerItem(resetMenu, MT_RESET_GBS, IMAGE_ITEM(OM_RESET_GBS), resetMenuHandler);
     oledMenu.registerItem(resetMenu, MT_RESTORE_FACTORY, IMAGE_ITEM(OM_RESTORE_FACTORY), resetMenuHandler);
+#if ENABLE_WIFI
     oledMenu.registerItem(resetMenu, MT_RESET_WIFI, IMAGE_ITEM(OM_RESET_WIFI), resetMenuHandler);
+#endif
 }
