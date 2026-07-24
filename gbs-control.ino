@@ -777,6 +777,7 @@ void setResetParameters()
     rto->osr = 0;
     rto->useHdmiSyncFix = 0;
     rto->notRecognizedCounter = 0;
+    rto->neoGeoCsyncLatched = false;
 
     adco->r_gain = 0;
     adco->g_gain = 0;
@@ -3423,7 +3424,8 @@ void doPostPresetLoadSteps()
         }
 
         if (rto->videoStandardInput == 1 || rto->videoStandardInput == 2) {
-            //GBS::PLLAD_ICP::write(5);         // 5 rather than 6 to work well with CVBS sync as well as CSync
+            GBS::PLLAD_ICP::write(5);            // 5 rather than 6 to work well with CVBS sync as well as CSync (pre-37c3127 value); ICP=3 alone left chronic MVS dropouts on stock 24MHz clock
+            latchPLLAD();
 
             GBS::ADC_FLTR::write(3);             // 5_03 4/5 ADC filter 3=40, 2=70, 1=110, 0=150 Mhz
             GBS::PLLAD_KS::write(2);             // 5_16
@@ -4726,11 +4728,61 @@ void updateSpDynamic(boolean withCurrentVideoModeCheck)
     if (rto->videoStandardInput != 0) {
         if (rto->videoStandardInput <= 2) { // SD interlaced
             GBS::SP_PRE_COAST::write(7);
-            GBS::SP_POST_COAST::write(3);
+            GBS::SP_POST_COAST::write(9); // pre-c364c0f value; 3 was too short for Csync re-lock after Vsync
             GBS::SP_DLT_REG::write(0xC0);     // old: 0x140 works better than 0x130 with psx
             GBS::SP_H_TIMER_VAL::write(0x28); // 5_33
 
             if (rto->syncTypeCsync) {
+                // Neo Geo (MVS/AES) gate: 264 line progressive Csync without serration pulses.
+                // VPERIOD_IF reads 527/528 there; regular NTSC interlace maxes out at 526.
+                // The dynamic ignore length below (~0x62) swallows the ~2.3us transition pulses
+                // at the vsync region borders of that sync, making SDCS vsync separation bistable
+                // (+/-11 line vertical jumps). A small fixed ignore keeps those pulses visible.
+                //
+                // Sticky latch: some individual boards (AES) never report a solid PLLAD lock,
+                // which makes getVideoMode() flicker and re-enters this function far more often
+                // than usual. On a marginal-lock board, a single VPERIOD_IF read (+ 1 retry) can
+                // land outside the window purely from that jitter, not from an actual source
+                // change; falling through to the dynamic path on that lone miss is exactly what
+                // reintroduces the vertical jump it's meant to prevent (confirmed via 2026-07-24
+                // AES log, see mvs-sync-issue.md 第11回).
+                //
+                // A miss is corroborated with STATUS_SYNC_PROC_VTOTAL (vt:) before releasing:
+                // on AES's VPERIOD_IF jitter, vt: stays pinned at 264 even while VPERIOD_IF reads
+                // garbage (same log), but a real format change (eg switching to NTSC) moves vt:
+                // away from 264 immediately, together with VPERIOD_IF. Requiring both to disagree
+                // lets a real source change release on the very first miss (no held-over 0x04
+                // bleeding into the new source), while a lone VPERIOD_IF misread with vt: still
+                // at 264 is treated as noise and keeps the gate latched.
+                uint16_t vPeriod = GBS::VPERIOD_IF::read();
+                if (vPeriod < 527 || vPeriod > 529) {
+                    delayMicroseconds(100);
+                    vPeriod = GBS::VPERIOD_IF::read(); // retry once, so the gate doesn't flap on a misread
+                }
+                if (vPeriod >= 527 && vPeriod <= 529) {
+                    if (!rto->neoGeoCsyncLatched || GBS::SP_H_PULSE_IGNOR::read() != 0x04) {
+                        rto->neoGeoCsyncLatched = true;
+                        GBS::SP_H_PULSE_IGNOR::write(0x04);
+                        rto->coastPositionIsSet = 0;
+                        SerialM.println(F("Csync without serration detected (Neo Geo): SP_H_PULSE_IGNOR fixed to 0x04"));
+                    }
+                    return;
+                }
+                if (rto->neoGeoCsyncLatched) {
+                    uint16_t vTotal = GBS::STATUS_SYNC_PROC_VTOTAL::read();
+                    if (vTotal >= 261 && vTotal <= 267) {
+                        // vt: still Neo Geo-like despite the VPERIOD_IF miss: noise, stay latched
+                        if (GBS::SP_H_PULSE_IGNOR::read() != 0x04) {
+                            GBS::SP_H_PULSE_IGNOR::write(0x04);
+                            rto->coastPositionIsSet = 0;
+                        }
+                        return;
+                    }
+                    // vt: corroborates a real format change: release the gate immediately
+                    rto->neoGeoCsyncLatched = false;
+                    SerialM.println(F("Neo Geo gate released (source no longer 264 line Csync)"));
+                }
+
                 uint16_t hPeriod = GBS::HPERIOD_IF::read();
                 for (int i = 0; i < 16; i++) {
                     if (hPeriod == 511 || hPeriod < 200) {
@@ -4770,12 +4822,12 @@ void updateSpDynamic(boolean withCurrentVideoModeCheck)
                     ratioHs = 0.032; // 0.032: (~100 / 2560) is ~2.5uS on NTSC (find with crtemudriver)
                 }
 
-                //Serial.print(" (debug) hPeriod: ");  Serial.println(hPeriod);
-                //Serial.print(" (debug) ratioHs: ");  Serial.println(ratioHs, 5);
-                //Serial.print(" (debug) ignoreBase: 0x");  Serial.println(ignoreLength,HEX);
+                //SerialM.print(F(" (debug) hPeriod: "));  SerialM.println(hPeriod);
+                //SerialM.print(F(" (debug) ratioHs: "));  SerialM.println(ratioHs, 5);
+                //SerialM.print(F(" (debug) ignoreBase: 0x"));  SerialM.println(ignoreLength, HEX);
                 uint16_t pllDiv = GBS::PLLAD_MD::read();
                 ignoreLength = ignoreLength + (pllDiv * (ratioHs * 0.38)); // for factor: crtemudriver tests
-                //SerialM.print(" (debug) ign.length: 0x"); SerialM.println(ignoreLength, HEX);
+                //SerialM.print(F(" (debug) ign.length: 0x")); SerialM.println(ignoreLength, HEX);
 
                 // > check relies on sync instability (potentially from too large ign. length) getting cought earlier
                 if (ignoreLength > GBS::SP_H_PULSE_IGNOR::read() || GBS::SP_H_PULSE_IGNOR::read() >= 0x90) {
@@ -7268,6 +7320,7 @@ void setup()
     rto->osr = 0;
     rto->useHdmiSyncFix = 0;
     rto->notRecognizedCounter = 0;
+    rto->neoGeoCsyncLatched = false;
 
     // more run time variables
     rto->inputIsYpBpR = false;
@@ -9542,7 +9595,7 @@ void startWebserver()
             //Serial.print("got serial request params: ");
             //Serial.println(params);
             if (params > 0) {
-                AsyncWebParameter *p = request->getParam(0);
+                const AsyncWebParameter *p = request->getParam((size_t)0);
                 //Serial.println(p->name());
                 serialCommand = p->name().charAt(0);
 
@@ -9561,7 +9614,7 @@ void startWebserver()
             //Serial.print("got user request params: ");
             //Serial.println(params);
             if (params > 0) {
-                AsyncWebParameter *p = request->getParam(0);
+                const AsyncWebParameter *p = request->getParam((size_t)0);
                 //Serial.println(p->name());
                 userCommand = p->name().charAt(0);
             }
@@ -9623,7 +9676,7 @@ void startWebserver()
             int params = request->params();
 
             if (params > 0) {
-                AsyncWebParameter *slotParam = request->getParam(0);
+                const AsyncWebParameter *slotParam = request->getParam((size_t)0);
                 String slotParamValue = slotParam->value();
                 char slotValue[2];
                 slotParamValue.toCharArray(slotValue, sizeof(slotValue));
@@ -9670,7 +9723,7 @@ void startWebserver()
                 }
 
                 // index param
-                AsyncWebParameter *slotIndexParam = request->getParam(0);
+                const AsyncWebParameter *slotIndexParam = request->getParam((size_t)0);
                 String slotIndexString = slotIndexParam->value();
                 uint8_t slotIndex = lowByte(slotIndexString.toInt());
                 if (slotIndex >= SLOTS_TOTAL) {
@@ -9678,7 +9731,7 @@ void startWebserver()
                 }
 
                 // name param
-                AsyncWebParameter *slotNameParam = request->getParam(1);
+                const AsyncWebParameter *slotNameParam = request->getParam((size_t)1);
                 String slotName = slotNameParam->value();
 
                 char emptySlotName[25] = "                        ";
@@ -9708,7 +9761,7 @@ void startWebserver()
     server.on("/slot/remove", HTTP_GET, [](AsyncWebServerRequest *request) {
         bool result = false;
         int params = request->params();
-        AsyncWebParameter *p = request->getParam(0);
+        const AsyncWebParameter *p = request->getParam((size_t)0);
         char param = p->name().charAt(0);
         if (params > 0)
         {
@@ -9803,7 +9856,7 @@ void startWebserver()
         if (ESP.getFreeHeap() > 10000) {
             int params = request->params();
             if (params > 0) {
-                request->send(SPIFFS, request->getParam(0)->value(), String(), true);
+                request->send(SPIFFS, request->getParam((size_t)0)->value(), String(), true);
             } else {
                 request->send(200, "application/json", "false");
             }
