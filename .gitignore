@@ -387,3 +387,13 @@ ASALocalRun/
 .vscode/launch.json
 .vscode/ipch
 i18n_preview*.jpg
+
+# Claude Code / devcontainer / local working notes, not part of upstream
+.claude/
+.devcontainer/
+CLAUDE.md
+TODO.md
+docs/
+PDF/
+GBSC/
+firmware.bin

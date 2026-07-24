@@ -26,6 +26,7 @@ PersWiFiManager::PersWiFiManager(AsyncWebServer &s, DNSServer &d)
 bool PersWiFiManager::attemptConnection(const String &ssid, const String &pass)
 {
     //attempt to connect to wifi
+    WiFi.persistent(true); // required for ESP8266 board package 3.0+ to save credentials
     WiFi.mode(WIFI_STA);
     WiFi.hostname(device_hostname_partial); // _full // before WiFi.begin();
     if (ssid.length()) {

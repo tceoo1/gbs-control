@@ -7243,6 +7243,10 @@ void ICACHE_RAM_ATTR isrRotaryEncoderPushForNewMenu()
 
 void setup()
 {
+    // Wait for power to stabilize, to reduce the risk of the ESP failing to boot until
+    // manually reset (https://github.com/ramapcsx2/gbs-control/issues/480).
+    delay(500);
+
     display.init();                 //inits OLED on I2C bus
     display.flipScreenVertically(); //orientation fix for OLED
 
@@ -9701,7 +9705,11 @@ void startWebserver()
                 File slotsBinaryFileRead = SPIFFS.open(SLOTS_FILE, "r");
 
                 if (slotsBinaryFileRead) {
-                    slotsBinaryFileRead.read((byte *)&slotsObject, sizeof(slotsObject));
+                    auto bytesRead = slotsBinaryFileRead.read((byte *)&slotsObject, sizeof(slotsObject));
+                    if (bytesRead < sizeof(slotsObject)) {
+                        Serial.print(F("Failed to read " SLOTS_FILE "!"));
+                        goto fail;
+                    }
                     slotsBinaryFileRead.close();
                 } else {
                     File slotsBinaryFileWrite = SPIFFS.open(SLOTS_FILE, "w");
