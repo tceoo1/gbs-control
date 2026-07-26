@@ -6430,8 +6430,9 @@ void runSyncWatcher()
                         filteredLineCountMotionAdaptiveOn++;
                         filteredLineCountMotionAdaptiveOff = 0;
                         // at least >= 6: this watcher runs every ~20ms, so 6 samples is ~120ms of a steady
-                        // reading. Measured +-1 VPERIOD_IF glitches on serration free Csync (Neo Geo 526/528)
-                        // last at most 40ms (2 samples), so they can no longer flip the deinterlacer
+                        // reading. On serration free Csync (Neo Geo) VPERIOD_IF wanders off 527 and back;
+                        // the part that lands on a value from this list never held longer than 40ms
+                        // (2 frames), so such a glitch can no longer flip the deinterlacer
                         if (filteredLineCountMotionAdaptiveOn >= 6)
                         {
                             if (uopt->deintMode == 0 && !rto->motionAdaptiveDeinterlaceActive) {
