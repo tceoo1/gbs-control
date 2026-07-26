@@ -6429,7 +6429,10 @@ void runSyncWatcher()
                         VPERIOD_IF == 622 || VPERIOD_IF == 624 || VPERIOD_IF == 626) { // ie v:524, even counts > enable
                         filteredLineCountMotionAdaptiveOn++;
                         filteredLineCountMotionAdaptiveOff = 0;
-                        if (filteredLineCountMotionAdaptiveOn >= 2) // at least >= 2
+                        // at least >= 6: this watcher runs every ~20ms, so 6 samples is ~120ms of a steady
+                        // reading. Measured +-1 VPERIOD_IF glitches on serration free Csync (Neo Geo 526/528)
+                        // last at most 40ms (2 samples), so they can no longer flip the deinterlacer
+                        if (filteredLineCountMotionAdaptiveOn >= 6)
                         {
                             if (uopt->deintMode == 0 && !rto->motionAdaptiveDeinterlaceActive) {
                                 if (GBS::GBS_OPTION_SCANLINES_ENABLED::read() == 1) { // don't rely on rto->scanlinesEnabled
@@ -6452,7 +6455,7 @@ void runSyncWatcher()
                         // a transient even VPERIOD_IF during lock-in can leave deinterlace stuck active
                         filteredLineCountMotionAdaptiveOff++;
                         filteredLineCountMotionAdaptiveOn = 0;
-                        if (filteredLineCountMotionAdaptiveOff >= 2) // at least >= 2
+                        if (filteredLineCountMotionAdaptiveOff >= 6) // same glitch filter depth as the enable path above
                         {
                             if (uopt->deintMode == 0 && rto->motionAdaptiveDeinterlaceActive) {
                                 disableMotionAdaptDeinterlace();
