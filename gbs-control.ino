@@ -6446,8 +6446,10 @@ void runSyncWatcher()
                             }
                             filteredLineCountMotionAdaptiveOn = 0;
                         }
-                    } else if (VPERIOD_IF == 521 || VPERIOD_IF == 523 || VPERIOD_IF == 525 ||
+                    } else if (VPERIOD_IF == 521 || VPERIOD_IF == 523 || VPERIOD_IF == 525 || VPERIOD_IF == 527 || VPERIOD_IF == 529 ||
                                VPERIOD_IF == 623 || VPERIOD_IF == 625 || VPERIOD_IF == 627) { // ie v:523, uneven counts > disable
+                        // 527/529: Neo Geo (MVS/AES) progressive output settles here; without these,
+                        // a transient even VPERIOD_IF during lock-in can leave deinterlace stuck active
                         filteredLineCountMotionAdaptiveOff++;
                         filteredLineCountMotionAdaptiveOn = 0;
                         if (filteredLineCountMotionAdaptiveOff >= 2) // at least >= 2
